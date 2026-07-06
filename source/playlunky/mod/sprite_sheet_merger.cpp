@@ -234,6 +234,7 @@ bool SpriteSheetMerger::NeedsRegen(const TargetSheet& target_sheet, const std::f
 
     return false;
 }
+#include "util/algorithms.h"
 
 bool SpriteSheetMerger::GenerateRequiredSheets(const std::filesystem::path& source_folder, const std::filesystem::path& destination_folder, VirtualFilesystem& vfs, bool force_reload)
 {
@@ -266,6 +267,19 @@ bool SpriteSheetMerger::GenerateRequiredSheets(const std::filesystem::path& sour
     {
         if (NeedsRegen(target_sheet, destination_folder))
         {
+            const auto destination_file_path = fs::path{ destination_folder / target_sheet.Path }.replace_extension(".DDS");
+
+            // Remove empty sheets (when a mod with them gets disabled)
+            if (!algo::contains_if(target_sheet.SourceSheets, [](const SourceSheet& sh)
+                                   { return sh.TileMap.size() > 0; }) &&
+                !algo::contains_if(target_sheet.MultiSourceTiles, [](const MultiSourceTile& sh)
+                                   { return sh.TileMap.size() > 0; }))
+            {
+                fs::remove(destination_file_path);
+                LogInfo("Deleting unused SpriteSheetMerge {}", target_sheet.Path.string());
+                continue;
+            }
+
             const auto target_file_path = vfs.GetFilePathFilterExt(target_sheet.Path, Image::AllowedExtensions).value_or(fs::path{ source_folder / target_sheet.Path }.replace_extension(".png"));
             Image target_image = get_image(target_file_path).Clone();
 
@@ -469,7 +483,6 @@ bool SpriteSheetMerger::GenerateRequiredSheets(const std::filesystem::path& sour
                 }
             }
 
-            const auto destination_file_path = fs::path{ destination_folder / target_sheet.Path }.replace_extension(".DDS");
             if (!ConvertRBGAToDds(target_image.GetData(), target_image.GetWidth(), target_image.GetHeight(), destination_file_path))
             {
                 return false;
